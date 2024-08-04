@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Chat Test</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.5.0/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        #chat-messages { height: 300px; border: 1px solid #ddd; overflow-y: scroll; margin-bottom: 20px; padding: 10px; }
+        input, button { margin: 5px 0; padding: 5px; }
+        #chat-form { display: flex; }
+        #message-input { flex-grow: 1; margin-right: 10px; }
+    </style>
+</head>
+<body>
+<h1>WebSocket Chat Test</h1>
+<div id="chat-messages"></div>
+<input type="text" id="username-input" placeholder="Enter your username">
+<button onclick="connect()">Connect</button>
+<form id="chat-form" style="display:none;">
+    <input type="text" id="message-input" placeholder="Type a message...">
+    <button type="submit">Send</button>
+</form>
+
+<script>
+    let stompClient = null;
+    const chatMessages = document.getElementById('chat-messages');
+    const usernameInput = document.getElementById('username-input');
+    const chatForm = document.getElementById('chat-form');
+    const messageInput = document.getElementById('message-input');
+
+    function connect() {
+        const username = usernameInput.value.trim();
+        if (!username) {
+            alert('Please enter a username');
+            return;
+        }
+
+        const socket = new SockJS('http://localhost:8080/ws');
+
+        stompClient = Stomp.over(socket);
+        stompClient.connect({}, function(frame) {
+            console.log('Connected: ' + frame);
+            stompClient.subscribe('/topic/public', function(message) {
+                showMessage(JSON.parse(message.body));
+            });
+
+            stompClient.send("/app/chat.addUser",
+                {},
+                JSON.stringify({sender: username, content: username + ' joined'})
+            );
+
+            usernameInput.style.display = 'none';
+            chatForm.style.display = 'flex';
+        }, function(error) {
+            console.error('STOMP error:', error);
+            if (error.headers && error.headers.message) {
+                console.error('Error message:', error.headers.message);
+            }
+            alert('Could not connect to WebSocket server. Please try again.');
+        });
+    }
+
+    function sendMessage(event) {
+        event.preventDefault();
+        const messageContent = messageInput.value.trim();
+        if (messageContent && stompClient) {
+            const chatMessage = {
+                sender: usernameInput.value,
+                content: messageContent
+            };
+            stompClient.send("/app/chat.sendMessage", {}, JSON.stringify(chatMessage));
+            messageInput.value = '';
+        }
+    }
+
+    function showMessage(message) {
+        const messageElement = document.createElement('div');
+        messageElement.textContent = `${message.sender}: ${message.content}`;
+        chatMessages.appendChild(messageElement);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    chatForm.addEventListener('submit', sendMessage);
+</script>
+</body>
+</html>
